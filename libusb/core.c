@@ -938,6 +938,7 @@ int API_EXPORTED libusb_get_max_iso_packet_size(libusb_device *dev,
 {
 	struct libusb_config_descriptor *config;
 	const struct libusb_endpoint_descriptor *ep;
+	struct libusb_ss_endpoint_companion_descriptor *ep_comp = NULL;
 	enum libusb_transfer_type ep_type;
 	uint16_t val;
 	int r;
@@ -955,12 +956,23 @@ int API_EXPORTED libusb_get_max_iso_packet_size(libusb_device *dev,
 
 	val = ep->wMaxPacketSize;
 	ep_type = (enum libusb_transfer_type) (ep->bmAttributes & 0x3);
-	libusb_free_config_descriptor(config);
 
 	r = val & 0x07ff;
-	if (ep_type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS
-			|| ep_type == LIBUSB_TRANSFER_TYPE_INTERRUPT)
+	if (ep_type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS &&
+		libusb_get_ss_endpoint_companion_descriptor(NULL, ep, &ep_comp) == LIBUSB_SUCCESS &&
+		NULL != ep_comp)
+	{
+		//superspeed isochronous, use ss companion descriptor Bytes Per Interval instead
+		r = ep_comp->wBytesPerInterval;
+		libusb_free_ss_endpoint_companion_descriptor(ep_comp);
+	}
+	else if (ep_type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS
+		|| ep_type == LIBUSB_TRANSFER_TYPE_INTERRUPT)
+	{
 		r *= (1 + ((val >> 11) & 3));
+	}
+
+	libusb_free_config_descriptor(config);
 	return r;
 }
 
